@@ -1,5 +1,6 @@
 from __future__ import print_function, absolute_import, unicode_literals
 from hashlib import sha256
+from threading import Lock
 import six
 from zope.interface import implementer
 from attr import attrs, attrib
@@ -67,6 +68,7 @@ class Key(object):
     set_trace = getattr(m, "_setTrace", lambda self, f: None)
 
     def __attrs_post_init__(self):
+        self._lock = Lock()
         self._SK = _SortedKey(self._appid, self._versions, self._side,
                               self._timing)
         self._debug_pake_stashed = False # for tests
@@ -90,18 +92,22 @@ class Key(object):
 
     @m.output()
     def stash_pake(self, body):
-        self._pake = body
-        self._debug_pake_stashed = True
+        with self._lock:
+            self._pake = body
+            self._debug_pake_stashed = True
     @m.output()
     def deliver_code(self, code):
-        self._SK.got_code(code)
+        with self._lock:
+            self._SK.got_code(code)
     @m.output()
     def deliver_pake(self, body):
-        self._SK.got_pake(body)
+        with self._lock:
+            self._SK.got_pake(body)
     @m.output()
     def deliver_code_and_stashed_pake(self, code):
-        self._SK.got_code(code)
-        self._SK.got_pake(self._pake)
+        with self._lock:
+            self._SK.got_code(code)
+            self._SK.got_pake(self._pake)
 
     S00.upon(got_code, enter=S10, outputs=[deliver_code])
     S10.upon(got_pake, enter=S11, outputs=[deliver_pake])
